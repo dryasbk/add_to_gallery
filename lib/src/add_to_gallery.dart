@@ -15,6 +15,9 @@ class AddToGallery {
     /// The original file to copy to the gallery
     required File originalFile,
 
+    /// The new name of the file to save
+    String? newFileName,
+
     /// Name of the album to save to, the album is created if necessary
     required String albumName,
 
@@ -27,6 +30,7 @@ class AddToGallery {
     File copiedFile = await copyToPermanentDirectory(
       originalFile: originalFile,
       prefix: filetype,
+      newFileName: newFileName,
     );
 
     // Save to gallery

@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'dart:typed_data';
+// import 'dart:typed_data';
 import 'package:add_to_gallery/add_to_gallery.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -31,13 +31,14 @@ class _MyAppState extends State<MyApp> {
               child: Center(
                 child: Text(
                   'Add to Gallery',
-                  style: Theme.of(context).textTheme.subtitle1,
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
               ),
             ),
             SaveAsset(assetPath: 'assets/local-image-1.jpg'),
             SaveAsset(assetPath: 'assets/local-image-2.jpg'),
             SaveImage(),
+            SaveNewImageName(newImageName: 'newImageName'),
             LastGalleryImage(),
           ],
         ),
@@ -150,6 +151,57 @@ class SaveImage extends StatelessWidget {
               }
               File file = await AddToGallery.addToGallery(
                 originalFile: cameraFile,
+                albumName: _albumName,
+                deleteOriginalFile: true,
+              );
+              await _saveGalleryPath(file.path);
+              await _showAlertMessage(context, file.path);
+            }
+          } on PlatformException catch (e) {
+            await _showError(context, 'Error: ${e.message}');
+          } catch (e) {
+            await _showError(context, 'Error: ${e.toString()}');
+          }
+        },
+        child: Padding(
+          padding: EdgeInsets.all(8.0),
+          child: Column(
+            children: <Widget>[
+              Icon(Icons.camera_alt),
+              Text('Take Photo'),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class SaveNewImageName extends StatelessWidget {
+  const SaveNewImageName({Key? key, required this.newImageName})
+      : super(key: key);
+  final String newImageName;
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: InkWell(
+        onTap: () async {
+          try {
+            PickedFile? image =
+                await ImagePicker().getImage(source: ImageSource.camera);
+            if (image != null) {
+              File cameraFile = File(image.path);
+              // iOS
+              if (!await Permission.photos.request().isGranted) {
+                throw ('Permission Required');
+              }
+              // Android (v9 and below)
+              if (!await Permission.storage.request().isGranted) {
+                throw ('Permission Required');
+              }
+              File file = await AddToGallery.addToGallery(
+                originalFile: cameraFile,
+                newFileName: newImageName,
                 albumName: _albumName,
                 deleteOriginalFile: true,
               );
