@@ -39,6 +39,9 @@ class _MyAppState extends State<MyApp> {
             SaveAsset(assetPath: 'assets/local-image-2.jpg'),
             SaveImage(),
             SaveNewImageName(newImageName: 'newImageName'),
+            SaveNewVideoName(
+              newVideoName: 'NewVideoName',
+            ),
             LastGalleryImage(),
           ],
         ),
@@ -227,7 +230,60 @@ class SaveNewImageName extends StatelessWidget {
     );
   }
 }
+//
 
+class SaveNewVideoName extends StatelessWidget {
+  const SaveNewVideoName({Key? key, required this.newVideoName})
+      : super(key: key);
+  final String newVideoName;
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: InkWell(
+        onTap: () async {
+          try {
+            PickedFile? image =
+                await ImagePicker().getVideo(source: ImageSource.gallery);
+            if (image != null) {
+              File cameraFile = File(image.path);
+              // iOS
+              if (!await Permission.photos.request().isGranted) {
+                throw ('Permission Required');
+              }
+              // Android (v9 and below)
+              if (!await Permission.storage.request().isGranted) {
+                throw ('Permission Required');
+              }
+              File file = await AddToGallery.addToGallery(
+                originalFile: cameraFile,
+                newFileName: newVideoName,
+                albumName: _albumName,
+                deleteOriginalFile: true,
+              );
+              await _saveGalleryPath(file.path);
+              await _showAlertMessage(context, file.path);
+            }
+          } on PlatformException catch (e) {
+            await _showError(context, 'Error: ${e.message}');
+          } catch (e) {
+            await _showError(context, 'Error: ${e.toString()}');
+          }
+        },
+        child: Padding(
+          padding: EdgeInsets.all(8.0),
+          child: Column(
+            children: <Widget>[
+              Icon(Icons.camera_alt),
+              Text('Take Photo'),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+//
 Future<void> _showAlertMessage(
   BuildContext context,
   String path,

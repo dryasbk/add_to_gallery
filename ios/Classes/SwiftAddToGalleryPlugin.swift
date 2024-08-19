@@ -16,6 +16,9 @@ public class SwiftAddToGalleryPlugin: NSObject, FlutterPlugin {
     ) {
         if call.method == "addToGallery" {
             self.addToAssetCollection(call, result)
+        } else if call.method == "addVideoToGallery" {
+            self.addVideoToAssetCollection(call, result)
+
         } else {
             result(FlutterMethodNotImplemented)
         }
@@ -50,6 +53,35 @@ public class SwiftAddToGalleryPlugin: NSObject, FlutterPlugin {
         }
     }
     
+    private func addVideoToAssetCollection(
+        _ call: FlutterMethodCall,
+        _ result: @escaping FlutterResult
+    ) {
+        let permissionStatus = PHPhotoLibrary.authorizationStatus()
+        if permissionStatus != .authorized {
+            result(FlutterError(code: "permissions", message: "Please grant PHPhotoLibrary permission", details: nil))
+        } else {
+            let args = call.arguments as? Dictionary<String, Any>
+            let imagePath = args!["path"] as! String
+            let albumName = args!["album"] as! String
+            if let album = fetchAssetCollectionForAlbum(albumName) {
+                self.addVideoFileToAssetCollection(imagePath, album, result)
+            } else {
+                createAssetCollectionForAlbum(albumName: albumName) { (error) in
+                    guard error == nil else {
+                        result(FlutterError(code: "album_not_available", message: "Album Not Available", details: nil))
+                        return
+                    }
+                    if let album = self.fetchAssetCollectionForAlbum(albumName){
+                        self.addVideoFileToAssetCollection(imagePath, album, result)
+                    } else {
+                        result(FlutterError(code: "could_not_create_album", message: "Could Not Create Album", details: nil))
+                    }
+                }
+            }
+        }
+    }
+    
     private func addFileToAssetCollection(
         _ imagePath: String,
         _ album: PHAssetCollection?,
@@ -58,6 +90,31 @@ public class SwiftAddToGalleryPlugin: NSObject, FlutterPlugin {
         let url = URL(fileURLWithPath: imagePath)
         PHPhotoLibrary.shared().performChanges({
             let assetCreationRequest = PHAssetChangeRequest.creationRequestForAssetFromImage(atFileURL: url)
+            if (album != nil) {
+                guard let assetCollectionChangeRequest = PHAssetCollectionChangeRequest(for: album!),
+                    let createdAssetPlaceholder = assetCreationRequest?.placeholderForCreatedAsset else {
+                        return
+                    }
+                assetCollectionChangeRequest.addAssets(NSArray(array: [createdAssetPlaceholder]))
+            }
+        }) { (success, error) in
+            if success {
+                result(imagePath) // Success!
+            } else {
+                result(FlutterError(code: "could_not_save_file", message: "Could Not Save File", details: nil))
+            }
+        }
+    }
+
+    private func addVideoFileToAssetCollection(
+        _ imagePath: String,
+        _ album: PHAssetCollection?,
+        _ result: @escaping FlutterResult
+    ) {
+        let url = URL(fileURLWithPath: imagePath)
+        PHPhotoLibrary.shared().performChanges({
+            let assetCreationRequest = PHAssetChangeRequest.
+            creationRequestForAssetFromVideo(atFileURL: url)
             if (album != nil) {
                 guard let assetCollectionChangeRequest = PHAssetCollectionChangeRequest(for: album!),
                     let createdAssetPlaceholder = assetCreationRequest?.placeholderForCreatedAsset else {

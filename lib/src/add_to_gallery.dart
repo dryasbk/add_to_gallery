@@ -33,15 +33,28 @@ class AddToGallery {
       newFileName: newFileName,
     );
 
-    // Save to gallery
-    String? methodResults = await _channel.invokeMethod(
-      'addToGallery',
-      <String, dynamic>{
-        'type': filetype,
-        'path': copiedFile.path,
-        'album': albumName,
-      },
-    );
+    // Save to gallery // Modified so can save video
+    String? methodResults;
+    if (filetype == 'image') {
+      methodResults = await _channel.invokeMethod(
+        'addToGallery',
+        <String, dynamic>{
+          'type': filetype,
+          'path': copiedFile.path,
+          'album': albumName,
+        },
+      );
+    } else if (filetype == 'video') {
+      methodResults = await _channel.invokeMethod(
+        "addVideoToGallery",
+        <String, dynamic>{
+          'type': filetype,
+          'path': copiedFile.path,
+          'album': albumName,
+        },
+      );
+    }
+
     // Nothing? Probably Android, return the copied file
     if (methodResults == null) {
       return copiedFile;
