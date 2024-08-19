@@ -140,8 +140,8 @@ class SaveImage extends StatelessWidget {
       child: InkWell(
         onTap: () async {
           try {
-            PickedFile? image =
-                await ImagePicker().getImage(source: ImageSource.camera);
+            final XFile? image =
+                await ImagePicker().pickImage(source: ImageSource.camera);
             if (image != null) {
               File cameraFile = File(image.path);
               // iOS
@@ -190,8 +190,8 @@ class SaveNewImageName extends StatelessWidget {
       child: InkWell(
         onTap: () async {
           try {
-            PickedFile? image =
-                await ImagePicker().getImage(source: ImageSource.camera);
+            final XFile? image =
+                await ImagePicker().pickImage(source: ImageSource.camera);
             if (image != null) {
               File cameraFile = File(image.path);
               // iOS
@@ -242,8 +242,8 @@ class SaveNewVideoName extends StatelessWidget {
       child: InkWell(
         onTap: () async {
           try {
-            PickedFile? image =
-                await ImagePicker().getVideo(source: ImageSource.gallery);
+            final XFile? image =
+                await ImagePicker().pickVideo(source: ImageSource.gallery);
             if (image != null) {
               File cameraFile = File(image.path);
               // iOS

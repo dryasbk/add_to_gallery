@@ -3,18 +3,18 @@ description: Demonstrates how to use the add_to_gallery plugin
 publish_to: 'none'
 
 environment:
-  sdk: ">=2.12.0 <3.0.0"
+  sdk: '>=3.3.4 <4.0.0'
   flutter: ^2.0.4
 
 dependencies:
   add_to_gallery:
     path: ../
-  http: ^0.13.3
-  image_picker: ^0.7.5+4
-  path_provider: ^2.0.2
-  path: ^1.8.0
-  permission_handler: ^8.1.1
-  shared_preferences: ^2.0.6
+  http: ^1.2.2
+  image_picker: ^1.1.2
+  path_provider: ^2.1.4
+  path: ^1.9.0
+  permission_handler: ^11.3.1
+  shared_preferences: ^2.3.2
 
   flutter:
     sdk: flutter
@@ -27,5 +27,5 @@ flutter:
   uses-material-design: true
 
   assets:
-   - assets/local-image-1.jpg
-   - assets/local-image-2.jpg
+    - assets/local-image-1.jpg
+    - assets/local-image-2.jpg
