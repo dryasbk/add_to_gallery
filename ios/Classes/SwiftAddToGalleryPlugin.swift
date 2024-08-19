@@ -113,8 +113,7 @@ public class SwiftAddToGalleryPlugin: NSObject, FlutterPlugin {
     ) {
         let url = URL(fileURLWithPath: imagePath)
         PHPhotoLibrary.shared().performChanges({
-            let assetCreationRequest = PHAssetChangeRequest.
-            creationRequestForAssetFromVideo(atFileURL: url)
+            let assetCreationRequest = PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: url)
             if (album != nil) {
                 guard let assetCollectionChangeRequest = PHAssetCollectionChangeRequest(for: album!),
                     let createdAssetPlaceholder = assetCreationRequest?.placeholderForCreatedAsset else {
