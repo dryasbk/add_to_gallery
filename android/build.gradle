@@ -1,3 +1,5 @@
+package android
+
 group 'flowmobile.add_to_gallery'
 version '1.0-SNAPSHOT'
 
