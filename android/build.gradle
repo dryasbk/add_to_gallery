@@ -2,7 +2,7 @@ group 'flowmobile.add_to_gallery'
 version '1.0-SNAPSHOT'
 
 buildscript {
-    ext.kotlin_version = '1.5.31'
+    ext.kotlin_version = '1.8.10'
     ext.kotlinCoroutinesVersion = '1.2.2'
     repositories {
         google()
@@ -10,7 +10,7 @@ buildscript {
     }
 
     dependencies {
-        classpath 'com.android.tools.build:gradle:4.0.2'
+        classpath 'com.android.tools.build:gradle:8.4.0'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
     }
 }
