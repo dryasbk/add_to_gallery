@@ -35,7 +35,7 @@ class AddToGallery {
 
     // Save to gallery // Modified so can save video
     String? methodResults;
-    if (filetype == 'image') {
+    if (filetype == 'image' || Platform.isAndroid) {
       methodResults = await _channel.invokeMethod(
         'addToGallery',
         <String, dynamic>{
