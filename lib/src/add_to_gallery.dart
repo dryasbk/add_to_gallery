@@ -35,24 +35,45 @@ class AddToGallery {
 
     // Save to gallery // Modified so can save video
     String? methodResults;
-    if (filetype == 'image' || Platform.isAndroid) {
-      methodResults = await _channel.invokeMethod(
-        'addToGallery',
-        <String, dynamic>{
-          'type': filetype,
-          'path': copiedFile.path,
-          'album': albumName,
-        },
-      );
-    } else if (filetype == 'video') {
-      methodResults = await _channel.invokeMethod(
-        "addVideoToGallery",
-        <String, dynamic>{
-          'type': filetype,
-          'path': copiedFile.path,
-          'album': albumName,
-        },
-      );
+
+    if (Platform.isIOS) {
+      if (filetype == 'image') {
+        methodResults = await _channel.invokeMethod(
+          'addToGallery',
+          <String, dynamic>{
+            'type': filetype,
+            'path': copiedFile.path,
+            'album': albumName,
+          },
+        );
+      } else if (filetype == 'video') {
+        methodResults = await _channel.invokeMethod(
+          "addVideoToGallery",
+          <String, dynamic>{
+            'type': filetype,
+            'path': copiedFile.path,
+            'album': albumName,
+          },
+        );
+      }
+    } else if (Platform.isAndroid) {
+      if (filetype == 'image') {
+        methodResults = await _channel.invokeMethod(
+          'saveImage',
+          {
+            'filePath': copiedFile.path,
+            'albumName': albumName,
+          },
+        );
+      } else if (filetype == 'video') {
+        methodResults = await _channel.invokeMethod(
+          'saveVideo',
+          {
+            'filePath': copiedFile.path,
+            'albumName': albumName,
+          },
+        );
+      }
     }
 
     // Nothing? Probably Android, return the copied file
