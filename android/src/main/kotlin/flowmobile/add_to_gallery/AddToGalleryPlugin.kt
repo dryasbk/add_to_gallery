@@ -1,140 +1,384 @@
-package flowmobile.add_to_gallery
-// package com.example.save_media_to_gallery
+/* @ts-nocheck */
+/* eslint-disable */
 
+package flowmobile.add_to_gallery
+
+import android.Manifest
 import android.app.Activity
 import android.content.ContentResolver
-import android.util.Log
-import android.widget.Toast
-
-import io.flutter.plugin.common.MethodChannel.MethodCallHandler
-import io.flutter.plugin.common.MethodChannel.Result
-import java.io.FileInputStream
-import java.io.FileOutputStream
-import java.io.InputStream
-//
 import android.content.ContentValues
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.media.MediaScannerConnection
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
-import android.provider.MediaStore
+import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import androidx.annotation.NonNull
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import io.flutter.embedding.engine.plugins.FlutterPlugin
+import io.flutter.embedding.engine.plugins.activity.ActivityAware
+import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
-import java.io.File
-import java.io.FileOutputStream
-import java.io.IOException
-import java.io.OutputStream
-// class AddToGalleryPlugin : FlutterPlugin, MethodCallHandler {
-class AddToGalleryPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
-// class SaveMediaToGalleryPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+import io.flutter.plugin.common.MethodChannel.MethodCallHandler
+import io.flutter.plugin.common.MethodChannel.Result
+import org.apache.commons.imaging.ImageFormat
+import org.apache.commons.imaging.Imaging
+import java.io.*
 
-    private lateinit var context: Context
+class AddToGalleryPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
+    private val PERMISSION = Manifest.permission.WRITE_EXTERNAL_STORAGE
+    private val IMAGE_URI = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+    private val VIDEO_URI = MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+    private val PERMISSION_REQUEST_CODE = 1317298
+    private val USE_EXTERNAL_STORAGE = Build.VERSION.SDK_INT <= 29
+
+    private lateinit var channel: MethodChannel
+    private lateinit var pluginBinding: FlutterPlugin.FlutterPluginBinding
+    private var activity: Activity? = null
+    private var requestAccessCallback: Runnable? = null
 
     override fun onAttachedToEngine(@NonNull flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
-        context = flutterPluginBinding.applicationContext
-        val channel = MethodChannel(flutterPluginBinding.binaryMessenger, "add_to_gallery")
+        channel = MethodChannel(flutterPluginBinding.binaryMessenger, "add_to_gallery")
         channel.setMethodCallHandler(this)
+        pluginBinding = flutterPluginBinding
     }
 
-    override fun onMethodCall(@NonNull call: MethodCall, @NonNull result: MethodChannel.Result) {
+    override fun onMethodCall(@NonNull call: MethodCall, @NonNull result: Result) {
         when (call.method) {
-            "saveImage" -> {
-                val imagePath = call.argument<String>("filePath")
-                val albumName = call.argument<String>("albumName")
-                val savedPath = saveImageToGallery(imagePath, albumName)
-                result.success(savedPath)
+            "putVideo", "putImage" -> {
+                Thread {
+                    try {
+                        val savedPath = putMedia(call.argument<String>("path")!!, call.argument<String>("album"), call.method.contains("Image"))
+                        Handler(Looper.getMainLooper()).post { result.success(savedPath) }
+                    } catch (e: Exception) {
+                        handleError(e, result)
+                    }
+                }.start()
             }
-            "saveVideo" -> {
-                val videoPath = call.argument<String>("filePath")
-                val albumName = call.argument<String>("albumName")
-                val savedPath = saveVideoToGallery(videoPath, albumName)
-                result.success(savedPath)
+            "putImageBytes" -> {
+                Thread {
+                    try {
+                        val savedPath = putMediaBytes(call.argument<ByteArray>("bytes")!!, call.argument<String>("album"), call.argument<String>("name"))
+                        Handler(Looper.getMainLooper()).post { result.success(savedPath) }
+                    } catch (e: Exception) {
+                        handleError(e, result)
+                    }
+                }.start()
+            }
+            "open" -> {
+                open()
+                Handler(Looper.getMainLooper()).post { result.success(null) }
+            }
+            "hasAccess" -> {
+                result.success(hasAccess(call.argument<Boolean>("toAlbum") == true))
+            }
+            "requestAccess" -> {
+                if (hasAccess(call.argument<Boolean>("toAlbum") == true)) {
+                    result.success(true)
+                    return
+                }
+                requestAccessCallback = Runnable {
+                    result.success(hasAccess(call.argument<Boolean>("toAlbum") == true))
+                }
+                requestAccess()
             }
             else -> result.notImplemented()
         }
     }
 
-    private fun saveImageToGallery(filePath: String?, albumName: String?): String? {
-        val file = File(filePath ?: return null)
-        if (!file.exists()) return null
+    private fun putMedia(path: String, album: String?, isImage: Boolean): String {
+        val file = File(path)
+        val name = file.name
+        val dotIndex = name.lastIndexOf('.')
+        if (dotIndex == -1) throw FileNotFoundException("Extension not found.")
 
-        val bitmap = BitmapFactory.decodeFile(filePath)
-        var fos: OutputStream? = null
-        var savedPath: String? = null
-
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val values = ContentValues().apply {
-                    put(MediaStore.Images.Media.DISPLAY_NAME, file.name)
-                    put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-                    put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/$albumName")
-                }
-                val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
-                fos = context.contentResolver.openOutputStream(uri!!)
-                savedPath = uri.toString()
-            } else {
-                val albumDir = File(context.getExternalFilesDir(null), albumName)
-                if (!albumDir.exists()) albumDir.mkdirs()
-                val destFile = File(albumDir, file.name)
-                fos = FileOutputStream(destFile)
-                MediaScannerConnection.scanFile(context, arrayOf(destFile.toString()), null, null)
-                savedPath = destFile.absolutePath
-            }
-
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 100, fos)
-            fos?.flush()
-            fos?.close()
-            return savedPath
-        } catch (e: IOException) {
-            e.printStackTrace()
-            return null
+        FileInputStream(file).use { inputStream ->
+            return writeData(inputStream, isImage, name.substring(0, dotIndex), name.substring(dotIndex), album)
         }
     }
 
-    private fun saveVideoToGallery(filePath: String?, albumName: String?): String? {
-        val file = File(filePath ?: return null)
-        if (!file.exists()) return null
-
-        var savedPath: String? = null
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val values = ContentValues().apply {
-                    put(MediaStore.Video.Media.DISPLAY_NAME, file.name)
-                    put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
-                    put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/$albumName")
-                }
-                val uri = context.contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
-                context.contentResolver.openOutputStream(uri!!)?.use {
-                    it.write(file.readBytes())
-                    it.flush()
-                }
-                savedPath = uri.toString()
-            } else {
-                val albumDir = File(context.getExternalFilesDir(null), albumName)
-                if (!albumDir.exists()) albumDir.mkdirs()
-                val destFile = File(albumDir, file.name)
-                FileOutputStream(destFile).use { fos ->
-                    fos.write(file.readBytes())
-                    fos.flush()
-                }
-                MediaScannerConnection.scanFile(context, arrayOf(destFile.toString()), null, null)
-                savedPath = destFile.absolutePath
-            }
-            return savedPath
-        } catch (e: IOException) {
-            e.printStackTrace()
-            return null
+    private fun putMediaBytes(bytes: ByteArray, album: String?, name: String): String {
+        val imageFormat = Imaging.guessFormat(bytes)
+        val extension = "." + imageFormat.defaultExtension.lowercase()
+        ByteArrayInputStream(bytes).use { inputStream ->
+            return writeData(inputStream, true, name, extension, album)
         }
+    }
+
+    private fun writeData(inputStream: InputStream, isImage: Boolean, name: String, extension: String, album: String?): String {
+        val resolver: ContentResolver = pluginBinding.applicationContext.contentResolver
+        val values = createContentValues(isImage, name, extension, album)
+        val uri = getUniqueFileUri(resolver, values, isImage, name, extension)
+        val savedPath: String = if (USE_EXTERNAL_STORAGE) {
+            values.getAsString(MediaStore.MediaColumns.DATA)!!
+        } else {
+            uri.toString()
+        }
+
+        resolver.openOutputStream(uri)?.use { outputStream ->
+            val buffer = ByteArray(8192)
+            var bytesRead: Int
+            while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                outputStream.write(buffer, 0, bytesRead)
+            }
+        }
+
+        return savedPath
+    }
+
+    private fun getUniqueFileUri(resolver: ContentResolver, values: ContentValues, isImage: Boolean, name: String, extension: String): Uri {
+        for (suffix in 0..Int.MAX_VALUE) {
+            try {
+                values.put(MediaStore.MediaColumns.DISPLAY_NAME, "$name${if (suffix > 0) suffix.toString() else ""}$extension")
+                return resolver.insert(if (isImage) IMAGE_URI else VIDEO_URI, values)!!
+            } catch (e: IllegalStateException) {
+                if (!e.message?.contains("Failed to build unique file")!!) throw e
+            }
+        }
+        throw IllegalStateException("Could not generate unique file URI")
+    }
+
+    private fun createContentValues(isImage: Boolean, name: String, extension: String, album: String?): ContentValues {
+        val values = ContentValues()
+        val dirPath = if (isImage || album != null) Environment.DIRECTORY_PICTURES else Environment.DIRECTORY_MOVIES
+
+        if (USE_EXTERNAL_STORAGE) {
+            val dir = File(Environment.getExternalStoragePublicDirectory(dirPath), album ?: "")
+            if (!dir.exists()) dir.mkdirs()
+            var path: String
+            var n = "${dir.path}${File.separator}$name"
+            for (i in 0 until Int.MAX_VALUE) {
+                path = n + if (i == 0) "" else i.toString() + extension
+                if (!File(path).exists()) {
+                    values.put(MediaStore.MediaColumns.DATA, path)
+                    break
+                }
+            }
+        } else {
+            val path = "$dirPath${if (album != null) "${File.separator}$album" else ""}"
+            values.put(if (isImage) MediaStore.Images.Media.RELATIVE_PATH else MediaStore.Video.Media.RELATIVE_PATH, path)
+        }
+        values.put(MediaStore.MediaColumns.DISPLAY_NAME, "$name$extension")
+        return values
+    }
+
+    private fun open() {
+        val intent = Intent(Intent.ACTION_VIEW)
+        if (Build.VERSION.SDK_INT <= 23) {
+            intent.type = "*/*"
+            intent.putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/*", "video/*"))
+        } else {
+            intent.data = IMAGE_URI
+        }
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        pluginBinding.applicationContext.startActivity(intent)
+    }
+
+    private fun hasAccess(toAlbum: Boolean): Boolean {
+        if (Build.VERSION.SDK_INT < 23 || Build.VERSION.SDK_INT > 29) return true
+        if (Build.VERSION.SDK_INT == 29 && !toAlbum) return true
+        val context: Context = pluginBinding.applicationContext
+        val status = ContextCompat.checkSelfPermission(context, PERMISSION)
+        return status == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun requestAccess() {
+        activity?.let {
+            ActivityCompat.requestPermissions(it, arrayOf(PERMISSION), PERMISSION_REQUEST_CODE)
+        }
+    }
+
+    private fun sendError(errorCode: String, message: String, stackTrace: Array<StackTraceElement>, result: Result) {
+        val trace = StringBuilder()
+        for (st in stackTrace) {
+            trace.append(st.toString()).append("\n")
+        }
+        Handler(Looper.getMainLooper()).post { result.error(errorCode, message, trace.toString()) }
+    }
+
+    private fun handleError(e: Exception, result: Result) {
+        val errorCode = when {
+            e is SecurityException || e.toString().contains("Permission denied") -> "ACCESS_DENIED"
+            e is FileNotFoundException -> "NOT_SUPPORTED_FORMAT"
+            e is IOException && e.toString().contains("No space left on device") -> "NOT_ENOUGH_SPACE"
+            else -> "UNEXPECTED"
+        }
+        sendError(errorCode, e.toString(), e.stackTrace, result)
+    }
+
+    override fun onAttachedToActivity(@NonNull activityPluginBinding: ActivityPluginBinding) {
+        activity = activityPluginBinding.activity
+        activityPluginBinding.addRequestPermissionsResultListener(this)
+    }
+
+    override fun onDetachedFromActivity() {
+        activity = null
+    }
+
+    override fun onReattachedToActivityForConfigChanges(@NonNull activityPluginBinding: ActivityPluginBinding) {
+        activity = activityPluginBinding.activity
+        activityPluginBinding.addRequestPermissionsResultListener(this)
+    }
+
+    override fun onDetachedFromActivityForConfigChanges() {
+        activity = null
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray): Boolean {
+        if (requestCode != PERMISSION_REQUEST_CODE || grantResults.isEmpty()) return false
+        Handler(Looper.getMainLooper()).post(requestAccessCallback)
+        requestAccessCallback = null
+        return true
     }
 
     override fun onDetachedFromEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {
-        // Clean up resources if necessary
+        channel.setMethodCallHandler(null)
+        pluginBinding = null
     }
 }
+
+
+
+// package com.example.save_media_to_gallery
+
+// import android.app.Activity
+// import android.content.ContentResolver
+// import android.util.Log
+// import android.widget.Toast
+
+// import io.flutter.plugin.common.MethodChannel.MethodCallHandler
+// import io.flutter.plugin.common.MethodChannel.Result
+// import java.io.FileInputStream
+// import java.io.FileOutputStream
+// import java.io.InputStream
+// //
+// import android.content.ContentValues
+// import android.content.Context
+// import android.graphics.Bitmap
+// import android.graphics.BitmapFactory
+// import android.media.MediaScannerConnection
+// import android.net.Uri
+// import android.os.Build
+// import android.provider.MediaStore
+// import androidx.annotation.NonNull
+// import io.flutter.embedding.engine.plugins.FlutterPlugin
+// import io.flutter.plugin.common.MethodCall
+// import io.flutter.plugin.common.MethodChannel
+// import java.io.File
+// import java.io.FileOutputStream
+// import java.io.IOException
+// import java.io.OutputStream
+// // class AddToGalleryPlugin : FlutterPlugin, MethodCallHandler {
+// class AddToGalleryPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+// // class SaveMediaToGalleryPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+
+//     private lateinit var context: Context
+
+//     override fun onAttachedToEngine(@NonNull flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
+//         context = flutterPluginBinding.applicationContext
+//         val channel = MethodChannel(flutterPluginBinding.binaryMessenger, "add_to_gallery")
+//         channel.setMethodCallHandler(this)
+//     }
+
+//     override fun onMethodCall(@NonNull call: MethodCall, @NonNull result: MethodChannel.Result) {
+//         when (call.method) {
+//             "saveImage" -> {
+//                 val imagePath = call.argument<String>("filePath")
+//                 val albumName = call.argument<String>("albumName")
+//                 val savedPath = saveImageToGallery(imagePath, albumName)
+//                 result.success(savedPath)
+//             }
+//             "saveVideo" -> {
+//                 val videoPath = call.argument<String>("filePath")
+//                 val albumName = call.argument<String>("albumName")
+//                 val savedPath = saveVideoToGallery(videoPath, albumName)
+//                 result.success(savedPath)
+//             }
+//             else -> result.notImplemented()
+//         }
+//     }
+
+//     private fun saveImageToGallery(filePath: String?, albumName: String?): String? {
+//         val file = File(filePath ?: return null)
+//         if (!file.exists()) return null
+
+//         val bitmap = BitmapFactory.decodeFile(filePath)
+//         var fos: OutputStream? = null
+//         var savedPath: String? = null
+
+//         try {
+//             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+//                 val values = ContentValues().apply {
+//                     put(MediaStore.Images.Media.DISPLAY_NAME, file.name)
+//                     put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+//                     put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/$albumName")
+//                 }
+//                 val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+//                 fos = context.contentResolver.openOutputStream(uri!!)
+//                 savedPath = uri.toString()
+//             } else {
+//                 val albumDir = File(context.getExternalFilesDir(null), albumName)
+//                 if (!albumDir.exists()) albumDir.mkdirs()
+//                 val destFile = File(albumDir, file.name)
+//                 fos = FileOutputStream(destFile)
+//                 MediaScannerConnection.scanFile(context, arrayOf(destFile.toString()), null, null)
+//                 savedPath = destFile.absolutePath
+//             }
+
+//             bitmap.compress(Bitmap.CompressFormat.JPEG, 100, fos)
+//             fos?.flush()
+//             fos?.close()
+//             return savedPath
+//         } catch (e: IOException) {
+//             e.printStackTrace()
+//             return null
+//         }
+//     }
+
+//     private fun saveVideoToGallery(filePath: String?, albumName: String?): String? {
+//         val file = File(filePath ?: return null)
+//         if (!file.exists()) return null
+
+//         var savedPath: String? = null
+//         try {
+//             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+//                 val values = ContentValues().apply {
+//                     put(MediaStore.Video.Media.DISPLAY_NAME, file.name)
+//                     put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+//                     put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/$albumName")
+//                 }
+//                 val uri = context.contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
+//                 context.contentResolver.openOutputStream(uri!!)?.use {
+//                     it.write(file.readBytes())
+//                     it.flush()
+//                 }
+//                 savedPath = uri.toString()
+//             } else {
+//                 val albumDir = File(context.getExternalFilesDir(null), albumName)
+//                 if (!albumDir.exists()) albumDir.mkdirs()
+//                 val destFile = File(albumDir, file.name)
+//                 FileOutputStream(destFile).use { fos ->
+//                     fos.write(file.readBytes())
+//                     fos.flush()
+//                 }
+//                 MediaScannerConnection.scanFile(context, arrayOf(destFile.toString()), null, null)
+//                 savedPath = destFile.absolutePath
+//             }
+//             return savedPath
+//         } catch (e: IOException) {
+//             e.printStackTrace()
+//             return null
+//         }
+//     }
+
+//     override fun onDetachedFromEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {
+//         // Clean up resources if necessary
+//     }
+// }
 
 
 
